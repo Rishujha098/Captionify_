@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Image Caption Generator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    
+    .spinner {
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border-left-color: #09f;
+      animation: spin 1s ease infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+  <div class="bg-white p-8 rounded-xl shadow-lg text-center max-w-lg w-full m-4">
+    <h1 class="text-3xl font-bold mb-2 text-gray-800">Captionify</h1>
+    <p class="text-gray-500 mb-6">Upload an image and let AI describe it for you!</p>
+    
+    <!-- Image Preview -->
+    <div id="imagePreviewContainer" class="mb-4 hidden">
+        <img id="imagePreview" src="#" alt="Image Preview" class="max-w-full max-h-64 mx-auto rounded-lg shadow-md"/>
+    </div>
+
+    <!-- File Input -->
+    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-500 transition-colors">
+        <input type="file" accept="image/*" id="imageInput" class="hidden" />
+        <label for="imageInput" id="uploadLabel" class="cursor-pointer">
+            <svg class="w-12 h-12 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-4-4V6a4 4 0 014-4h10a4 4 0 014 4v6a4 4 0 01-4 4H7z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            <p class="mt-2 text-sm text-gray-600">Click to upload an image</p>
+            <p id="fileName" class="text-xs text-gray-500"></p>
+        </label>
+    </div>
+
+    <!-- Generate Button -->
+    <button id="generateBtn" class="bg-blue-600 text-white w-full px-4 py-3 mt-6 rounded-lg font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-transform transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed">
+      Generate Caption
+    </button>
+    
+    <!-- Output Area -->
+    <div id="output" class="mt-6 text-left p-4 bg-gray-50 rounded-lg min-h-[80px] flex items-center justify-center">
+        <p class="text-gray-500">Your AI-generated caption will appear here.</p>
+    </div>
+  </div>
+
+  <script>
+    // --- DOM Element References ---
+    const imageInput = document.getElementById("imageInput");
+    const imagePreview = document.getElementById("imagePreview");
+    const imagePreviewContainer = document.getElementById("imagePreviewContainer");
+    const fileName = document.getElementById("fileName");
+    const generateBtn = document.getElementById("generateBtn");
+    const output = document.getElementById("output");
+    const uploadLabel = document.getElementById("uploadLabel");
+
+    // --- Event Listeners ---
+    imageInput.addEventListener("change", handleImageUpload);
+    generateBtn.addEventListener("click", generateImageCaption);
+
+    // --- Functions ---
+
+    /**
+     * Handles the image file selection, displays a preview, and updates the UI.
+     */
+    function handleImageUpload(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                imagePreview.src = e.target.result;
+                imagePreviewContainer.classList.remove('hidden');
+            }
+            reader.readAsDataURL(file);
+            fileName.textContent = `File: ${file.name}`;
+            uploadLabel.classList.add('hidden'); // Hide the upload prompt
+        } else {
+            // Reset if no file is chosen
+            imagePreviewContainer.classList.add('hidden');
+            fileName.textContent = '';
+            uploadLabel.classList.remove('hidden');
+        }
+    }
+
+    /**
+     * Converts a file object to a base64 encoded string.
+     * @param {File} file The file to convert.
+     * @returns {Promise<string>} A promise that resolves with the base64 string.
+     */
+    function toBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+      });
+    }
+
+    /**
+     * Main function to generate the image caption using the Gemini API.
+     */
+    async function generateImageCaption() {
+      // 1. Check for an image
+      if (!imageInput.files[0]) {
+        output.innerHTML = `<p class="text-red-500 font-medium">⚠️ Please select an image first.</p>`;
+        return;
+      }
+      
+      // 2. Update UI to show loading state
+      setLoading(true);
+
+      try {
+        // 3. Prepare image data for the API
+        const file = imageInput.files[0];
+        const base64Image = await toBase64(file);
+        const imagePart = {
+          inlineData: {
+            mimeType: file.type,
+            data: base64Image.split(',')[1], // Remove the "data:image/...;base64," prefix
+          },
+        };
+
+        // 4. Prepare the API request payload
+        const prompt = "Generate a creative and engaging Instagram caption for this image. Include relevant emojis and hashtags.";
+        const payload = {
+          contents: [{
+            role: "user",
+            parts: [{ text: prompt }, imagePart]
+          }],
+        };
+
+        // 5. Call the Gemini API
+        // The API key is left as an empty string. The execution environment will handle authentication.
+        const apiKey = "AIzaSyACZg782u7nzSIKwpVrgTC2ED-priIWQNk"; 
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+        
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        
+        // 6. Process the response and display the caption
+        if (result.candidates && result.candidates.length > 0 &&
+            result.candidates[0].content && result.candidates[0].content.parts &&
+            result.candidates[0].content.parts.length > 0) {
+          const caption = result.candidates[0].content.parts[0].text;
+          // Sanitize and format the output to render newlines correctly
+          const formattedCaption = caption.replace(/\n/g, '<br>');
+          output.innerHTML = `<p class="text-gray-800">${formattedCaption}</p>`;
+        } else {
+          throw new Error("Invalid response structure from the API.");
+        }
+
+      } catch (err) {
+        console.error("Error generating caption:", err);
+        output.innerHTML = `<p class="text-red-500">❌ <strong>Error:</strong> ${err.message}</p>`;
+      } finally {
+        // 7. Reset UI from loading state
+        setLoading(false);
+      }
+    }
+
+    /**
+     * Toggles the UI between loading and idle states.
+     * @param {boolean} isLoading - True if loading, false otherwise.
+     */
+    function setLoading(isLoading) {
+        generateBtn.disabled = isLoading;
+        if (isLoading) {
+            output.innerHTML = `
+                <div class="flex flex-col items-center justify-center">
+                    <div class="spinner"></div>
+                    <p class="mt-2 text-gray-600">Analyzing image...</p>
+                </div>`;
+            generateBtn.innerHTML = "Generating...";
+        } else {
+            generateBtn.innerHTML = "Generate Caption";
+        }
+    }
+  </script>
+</body>
+</html>
